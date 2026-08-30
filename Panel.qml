@@ -34,7 +34,33 @@ Ui.Panel {
 
   readonly property string pairedName: RipcordState.pairedLabel.length > 0
     ? RipcordState.pairedLabel
-    : RipcordState.pairedUuid
+    : "paired drive"
+
+  // Drives are sized in the units printed on the box, so GB not GiB.
+  function humanSize(bytes) {
+    if (!bytes || bytes <= 0) return ""
+    var gb = bytes / 1e9
+    if (gb >= 10) return Math.round(gb) + " GB"
+    if (gb >= 1) return gb.toFixed(1) + " GB"
+    return Math.round(bytes / 1e6) + " MB"
+  }
+
+  // What to call a drive in the list: the volume name if it has one, since
+  // that is what people recognise, and the hardware name when it does not.
+  function driveTitle(drive) {
+    if (!drive) return ""
+    if (drive.label && drive.label.length > 0) return drive.label
+    return drive.name && drive.name.length > 0 ? drive.name : drive.device
+  }
+
+  function driveSubtitle(drive) {
+    if (!drive) return ""
+    var parts = []
+    if (drive.name && drive.name.length > 0) parts.push(drive.name)
+    var size = root.humanSize(drive.size)
+    if (size.length > 0) parts.push(size)
+    return parts.join(" · ")
+  }
 
   // Fixed, on purpose. This panel gets one look of its own instead of taking
   // the theme's idea of red and green, because the whole job of these three
@@ -402,12 +428,8 @@ Ui.Panel {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
-                // One physical stick can carry several filesystems, and each
-                // is listed separately because each has its own identifier.
-                // Pairing any one of them is enough: they all disappear
-                // together when the drive is pulled.
                 text: RipcordState.drives.length > 0
-                  ? "Filesystems on drives you can unplug — choose one to pair:"
+                  ? "Drives you can unplug — choose one to pair:"
                   : "No removable drives attached. Plug one in to pair it."
                 color: root.barForeground
                 opacity: root.secondaryOpacity
@@ -418,22 +440,72 @@ Ui.Panel {
               Repeater {
                 model: RipcordState.drives
 
-                Ui.Button {
+                // One row per physical drive, with the hardware name and size
+                // underneath so a stick is identifiable even when its volume
+                // name is unhelpful or missing.
+                Rectangle {
+                  id: driveRow
                   required property var modelData
+                  readonly property bool isPaired:
+                    modelData.id === RipcordState.pairedId
+
                   width: mainColumn.width
-                  text: (modelData.label && modelData.label.length > 0)
-                    ? modelData.label
-                    : modelData.uuid
-                  // The tooltip is rendered as rich text by the shell, so the
-                  // label - which is whatever somebody named their drive -
-                  // has its angle brackets taken out before it goes in.
-                  tooltipText: (modelData.device + " · " + modelData.uuid)
-                    .replace(/[<>]/g, "")
-                  bordered: true
-                  foreground: root.barForeground
-                  enabled: modelData.uuid !== RipcordState.pairedUuid
-                  opacity: enabled ? 1.0 : 0.45
-                  onClicked: RipcordState.pair(modelData.uuid, modelData.label)
+                  implicitHeight: driveText.implicitHeight + Style.spacing.md * 2
+                  radius: Style.cornerRadius > 0 ? Style.space(6) : 0
+                  color: driveMouse.containsMouse && !driveRow.isPaired
+                    ? Qt.rgba(root.goColor.r, root.goColor.g, root.goColor.b, 0.12)
+                    : "transparent"
+                  border.color: driveRow.isPaired ? root.goColor : root.barForeground
+                  border.width: Math.max(1, Style.space(driveRow.isPaired ? 2 : 1))
+                  opacity: driveRow.isPaired ? 1.0 : 0.85
+
+                  Behavior on color { ColorAnimation { duration: 120 } }
+
+                  Column {
+                    id: driveText
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.margins: Style.spacing.md
+                    spacing: Style.space(2)
+
+                    Text {
+                      textFormat: Text.PlainText
+                      width: parent.width
+                      elide: Text.ElideRight
+                      text: root.driveTitle(driveRow.modelData)
+                      color: driveRow.isPaired ? root.goColor : root.barForeground
+                      font.bold: true
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                    }
+
+                    Text {
+                      textFormat: Text.PlainText
+                      width: parent.width
+                      elide: Text.ElideRight
+                      visible: text.length > 0
+                      text: {
+                        var sub = root.driveSubtitle(driveRow.modelData)
+                        return driveRow.isPaired ? (sub + "  ·  PAIRED") : sub
+                      }
+                      color: driveRow.isPaired ? root.goColor : root.barForeground
+                      opacity: root.secondaryOpacity
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.bodySmall
+                    }
+                  }
+
+                  MouseArea {
+                    id: driveMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    enabled: !driveRow.isPaired
+                    cursorShape: driveRow.isPaired
+                      ? Qt.ArrowCursor : Qt.PointingHandCursor
+                    onClicked: RipcordState.pair(driveRow.modelData.id,
+                                                 root.driveTitle(driveRow.modelData))
+                  }
                 }
               }
             }

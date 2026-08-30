@@ -40,17 +40,19 @@ QtObject {
 
   // ---------------------------------------------------------- the pairing
   //
-  // The key is the filesystem's unique identifier, not its name. A drive
-  // labelled "Ripcord" is a label anybody can write onto their own stick; the
-  // identifier is the drive.
-  property string pairedUuid: ""
+  // The key is the physical drive, taken from its USB serial where there is
+  // one. Not its name - a drive labelled "Ripcord" is a label anybody can
+  // write onto their own stick - and not one of its filesystems either, since
+  // a partition UUID changes the moment the drive is reformatted and would
+  // break the pairing silently.
+  property string pairedId: ""
   property string pairedLabel: ""
-  readonly property bool paired: root.pairedUuid.length > 0
+  readonly property bool paired: root.pairedId.length > 0
 
   readonly property bool pairedPresent: {
     if (!root.paired) return false
     for (var i = 0; i < root.drives.length; i++) {
-      if (root.drives[i].uuid === root.pairedUuid) return true
+      if (root.drives[i].id === root.pairedId) return true
     }
     return false
   }
@@ -107,20 +109,20 @@ QtObject {
     root.lastEvent = "Disarmed at " + Qt.formatTime(new Date(), "HH:mm")
   }
 
-  function pair(uuid, label) {
-    if (typeof uuid !== "string" || uuid.length === 0) return
-    if (uuid.length > root.maxFieldLength) return
+  function pair(id, label) {
+    if (typeof id !== "string" || id.length === 0) return
+    if (id.length > root.maxFieldLength) return
     // Changing the key while the trap is set would leave it watching for a
     // drive the user never armed against.
     root.disarm()
-    root.pairedUuid = uuid
+    root.pairedId = id
     root.pairedLabel = (typeof label === "string") ? label.slice(0, root.maxFieldLength) : ""
     root.scheduleSettingsSave()
   }
 
   function unpair() {
     root.disarm()
-    root.pairedUuid = ""
+    root.pairedId = ""
     root.pairedLabel = ""
     root.scheduleSettingsSave()
   }
@@ -319,14 +321,20 @@ QtObject {
     for (var i = 0; i < list.length; i++) {
       var entry = list[i]
       if (!entry || typeof entry !== "object") continue
-      if (typeof entry.uuid !== "string" || entry.uuid.length === 0) continue
-      if (entry.uuid.length > root.maxFieldLength) continue
+      if (typeof entry.id !== "string" || entry.id.length === 0) continue
+      if (entry.id.length > root.maxFieldLength) continue
       cleaned.push({
-        uuid: entry.uuid,
+        id: entry.id,
+        name: (typeof entry.name === "string")
+          ? entry.name.slice(0, root.maxFieldLength) : "",
         label: (typeof entry.label === "string")
           ? entry.label.slice(0, root.maxFieldLength) : "",
         device: (typeof entry.device === "string")
-          ? entry.device.slice(0, root.maxFieldLength) : ""
+          ? entry.device.slice(0, root.maxFieldLength) : "",
+        size: (typeof entry.size === "number" && isFinite(entry.size) && entry.size >= 0)
+          ? entry.size : 0,
+        partitions: (typeof entry.partitions === "number" && isFinite(entry.partitions))
+          ? entry.partitions : 0
       })
     }
 
@@ -466,9 +474,12 @@ QtObject {
       parsed = null
     }
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      if (typeof parsed.pairedUuid === "string"
-          && parsed.pairedUuid.length <= root.maxFieldLength)
-        root.pairedUuid = parsed.pairedUuid
+      // Deliberately does not read the old pairedUuid: it named a filesystem,
+      // not a drive, so carrying it over would leave a pairing that can never
+      // match. An upgrade re-pairs once, and says so rather than pretending.
+      if (typeof parsed.pairedId === "string"
+          && parsed.pairedId.length <= root.maxFieldLength)
+        root.pairedId = parsed.pairedId
       if (typeof parsed.pairedLabel === "string")
         root.pairedLabel = parsed.pairedLabel.slice(0, root.maxFieldLength)
       if (typeof parsed.lockOnPull === "boolean") root.lockOnPull = parsed.lockOnPull
@@ -496,7 +507,7 @@ QtObject {
     root.savingNow = true
     // `armed` is absent on purpose. See the note on it above.
     root.settingsFile.setText(JSON.stringify({
-      pairedUuid: root.pairedUuid,
+      pairedId: root.pairedId,
       pairedLabel: root.pairedLabel,
       lockOnPull: root.lockOnPull,
       suspendOnPull: root.suspendOnPull,

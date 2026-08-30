@@ -190,29 +190,152 @@ def is_unpluggable(device, sys_block=SYS_BLOCK):
     return False
 
 
+def read_first_line(path, limit=256):
+    try:
+        with open(path, "rb") as handle:
+            return handle.read(limit).decode("utf-8", "replace").strip()
+    except OSError:
+        return ""
+
+
+def usb_node_of(disk):
+    """Walk up from a disk to the USB device it hangs off, if any.
+
+    The serial lives there rather than on the block device: a USB stick's
+    SCSI-level `serial` and `wwid` are usually empty (measured - both are
+    empty for a SanDisk 3.2Gen1), while the USB descriptor carries a real one.
+    """
+    try:
+        path = os.path.realpath(os.path.join(SYS_BLOCK, disk, "device"))
+    except OSError:
+        return None
+    # Bounded rather than while-True: a symlink loop would otherwise spin here.
+    for _ in range(12):
+        if not path or path == "/":
+            return None
+        if os.path.exists(os.path.join(path, "idVendor")) and os.path.exists(
+            os.path.join(path, "serial")
+        ):
+            return path
+        path = os.path.dirname(path)
+    return None
+
+
+def drive_identity(disk, first_uuid):
+    """A key for the physical drive that survives reformatting it.
+
+    Preferred in this order, because each is more stable than the next: the USB
+    descriptor serial, the SCSI serial, the wwid, and only then a partition
+    UUID - which is stable enough day to day but changes the moment the drive
+    is reformatted, silently breaking a pairing. The prefix says which was
+    used so the two can never collide.
+    """
+    node = usb_node_of(disk)
+    if node:
+        serial = read_first_line(os.path.join(node, "serial"))
+        if serial:
+            return "usb:" + serial[:MAX_NAME]
+
+    for attribute in ("serial", "wwid"):
+        value = read_first_line(os.path.join(SYS_BLOCK, disk, "device", attribute))
+        if value:
+            return "dev:" + value[:MAX_NAME]
+
+    if first_uuid:
+        return "uuid:" + first_uuid[:MAX_NAME]
+    return ""
+
+
+def describe(disk):
+    """A human name for the drive, and its size in bytes."""
+    node = usb_node_of(disk)
+    product = read_first_line(os.path.join(node, "product")) if node else ""
+    model = read_first_line(os.path.join(SYS_BLOCK, disk, "device", "model"))
+    name = product or model or disk
+
+    sectors = read_first_line(os.path.join(SYS_BLOCK, disk, "size"))
+    try:
+        size = int(sectors) * 512
+    except (TypeError, ValueError):
+        size = 0
+    return name, size
+
+
+def partitions_of(disk):
+    """The partition device names belonging to a disk, in order."""
+    base = os.path.join(SYS_BLOCK, disk)
+    found = []
+    try:
+        for entry in sorted(os.listdir(base)):
+            if entry.startswith(disk) and os.path.exists(
+                os.path.join(base, entry, "partition")
+            ):
+                found.append(entry)
+    except OSError:
+        pass
+    return found[:64]
+
+
 def scan():
-    """The current set of removable filesystems, sorted for stable output."""
+    """The physical drives you can unplug, one entry each.
+
+    Listing filesystems instead of drives was the first design and it was
+    wrong: a single installer stick came out as three cryptic rows, two of them
+    showing a UUID because the partition has no label. People think in drives,
+    so the drive is the unit - and pairing to the drive rather than to one of
+    its filesystems is also what makes a pairing survive a reformat.
+    """
     uuids = read_links(BY_UUID)
     labels = read_links(BY_LABEL)
 
+    try:
+        candidates = sorted(os.listdir(SYS_BLOCK))
+    except OSError:
+        return []
+
     drives = []
-    for device, uuid in uuids.items():
-        if not is_unpluggable(device):
+    for disk in candidates:
+        # Virtual devices never qualify, and skipping them by name keeps the
+        # sysfs walk off a few hundred entries that cannot match.
+        if disk.startswith(("loop", "ram", "zram", "dm-", "md", "sr")):
             continue
-        label = labels.get(device, "")
+        # A partition is not a drive; only whole devices are considered.
+        if os.path.exists(os.path.join(SYS_BLOCK, disk, "partition")):
+            continue
+        if not is_unpluggable(disk):
+            continue
+
+        members = partitions_of(disk) or [disk]
+        member_labels = []
+        first_uuid = ""
+        for member in members:
+            if not first_uuid and member in uuids:
+                first_uuid = uuids[member]
+            raw = labels.get(member, "")
+            if raw:
+                member_labels.append(unescape_udev(raw))
+
+        identity = drive_identity(disk, first_uuid)
+        if not identity:
+            continue
+
+        name, size = describe(disk)
         drives.append(
             {
-                # The UUID is a link name too, but udev never escapes one:
-                # they are hex and dashes by construction.
-                "uuid": uuid,
-                "label": unescape_udev(label) if label else "",
-                "device": device,
+                "id": identity,
+                "device": disk,
+                "name": name[:MAX_NAME],
+                # The volume name is what people recognise the stick by, so it
+                # leads when there is one and the hardware name backs it up.
+                "label": (member_labels[0] if member_labels else "")[:MAX_NAME],
+                "size": size,
+                "partitions": len(members),
             }
         )
         if len(drives) >= MAX_DRIVES:
             break
 
-    drives.sort(key=lambda d: d["uuid"])
+    drives.sort(key=lambda d: d["id"])
     return drives
 
 

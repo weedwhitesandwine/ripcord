@@ -15,9 +15,14 @@ implementation for Omarchy and shares no code with it.
 
 ## What it does
 
-- **Pairs to a drive, not a name.** The key is the filesystem's unique
-  identifier, so relabelling a drive does not break the pairing and a drive
-  named to match yours cannot stand in for it.
+- **Pairs to the physical drive.** The key is the drive's USB serial, so
+  relabelling it does not break the pairing, reformatting it does not either,
+  and a drive named to match yours cannot stand in for it. Drives that report
+  no serial fall back to a partition identifier, which does not survive a
+  reformat.
+- **Lists drives, not partitions.** One row per stick you can unplug, named by
+  its volume with the hardware name and size underneath — not one row per
+  filesystem, which turns a single installer stick into three cryptic entries.
 - **Only offers drives you can physically pull out.** Devices reached over USB,
   and anything the kernel reports as removable. The disk your system runs from
   is never offered.
@@ -79,6 +84,7 @@ written anywhere.
 | Path | Why |
 |---|---|
 | `/dev/disk/by-uuid`, `/dev/disk/by-label` | To see which filesystems are attached and what they are called |
+| `/sys/block/*/device/*`, USB device nodes | To identify each drive — serial, model and size |
 | `/sys/class/block/...` | To tell a drive you can pull out from one that is bolted in |
 | its own `settings.json` | To restore your pairing and settings |
 
