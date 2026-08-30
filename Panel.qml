@@ -170,12 +170,18 @@ Ui.Panel {
             anchors.verticalCenter: parent.verticalCenter
             // Nerd Font glyphs rather than emoji, so they take the colour they
             // are given instead of rendering as colour bitmaps.
-            // Written as escapes, not literal glyphs: a pasted Nerd Font
-            // character does not survive every tool it passes through, and an
-            // empty iconText renders as an invisible button rather than an
-            // error. Both codepoints are in the BMP, so one \u each, and both
-            // are present in JetBrains Mono Nerd Font (verified, not assumed).
-            iconText: RipcordState.lightMode ? "\uF186" : "\uF185"
+            // The crescent in both states, deliberately. The sun at this size
+            // is a spoked disc that reads as a second settings gear sitting
+            // next to the real one - the icon has to be told apart from its
+            // neighbour before it can say anything about the mode, and the
+            // tooltip carries the direction anyway.
+            //
+            // Written as an escape rather than a pasted glyph: a literal Nerd
+            // Font character does not survive every tool it passes through,
+            // and an empty iconText draws an invisible button instead of an
+            // error. U+F186 is in the BMP, so one \u, and it is present in
+            // JetBrains Mono Nerd Font (verified by querying the font).
+            iconText: "\uF186"
             tooltipText: RipcordState.lightMode
               ? "Switch to dark" : "Switch to light"
             foreground: root.textColor
