@@ -95,7 +95,13 @@ Ui.Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(Style.space(root.settingsOpen ? 400 : 600))
+    // Sized to what is actually in it rather than a fixed guess, which left
+    // two-thirds of the panel empty once the pairing collapsed to one line.
+    // fittedContentHeight still clamps it to the space on screen.
+    contentHeight: panel.fittedContentHeight(
+      headerRow.height + Style.spacing.lg
+      + (root.settingsOpen ? settingsColumn.implicitHeight : mainColumn.implicitHeight)
+      + Style.spacing.md)
 
     Ui.PanelKeyCatcher {
       id: keyCatcher
@@ -164,7 +170,12 @@ Ui.Panel {
             anchors.verticalCenter: parent.verticalCenter
             // Nerd Font glyphs rather than emoji, so they take the colour they
             // are given instead of rendering as colour bitmaps.
-            iconText: RipcordState.lightMode ? "" : ""
+            // Written as escapes, not literal glyphs: a pasted Nerd Font
+            // character does not survive every tool it passes through, and an
+            // empty iconText renders as an invisible button rather than an
+            // error. Both codepoints are in the BMP, so one \u each, and both
+            // are present in JetBrains Mono Nerd Font (verified, not assumed).
+            iconText: RipcordState.lightMode ? "\uF186" : "\uF185"
             tooltipText: RipcordState.lightMode
               ? "Switch to dark" : "Switch to light"
             foreground: root.textColor
