@@ -49,13 +49,24 @@ QtObject {
   property string pairedLabel: ""
   readonly property bool paired: root.pairedId.length > 0
 
-  readonly property bool pairedPresent: {
-    if (!root.paired) return false
+  readonly property int pairedMatches: {
+    if (!root.paired) return 0
+    var found = 0
     for (var i = 0; i < root.drives.length; i++) {
-      if (root.drives[i].id === root.pairedId) return true
+      if (root.drives[i].id === root.pairedId) found = found + 1
     }
-    return false
+    return found
   }
+
+  readonly property bool pairedPresent: root.pairedMatches > 0
+
+  // More than one attached drive answering to the paired identity means the
+  // trap can no longer tell them apart - pull the real key and the impostor
+  // holds the match open, so nothing fires. Cheap flash drives are routinely
+  // shipped with duplicate or absent serials, so this is a thing that happens
+  // by accident far more often than by design. It cannot be resolved from
+  // here, so it is surfaced rather than guessed at.
+  readonly property bool pairedAmbiguous: root.pairedMatches > 1
 
   // ------------------------------------------------------------- settings
   property bool lockOnPull: true
@@ -86,6 +97,7 @@ QtObject {
 
   readonly property string statusText: {
     if (!root.paired) return "No drive paired"
+    if (root.pairedAmbiguous) return "Two drives share this identity"
     if (!root.armed) return "Disarmed"
     if (root.awaitingReinsert) return "Tripped — reinsert to re-arm"
     if (!root.pairedPresent) return "Armed, drive missing"
@@ -93,7 +105,11 @@ QtObject {
   }
 
   function canArm() {
+    // Refuses while the identity is ambiguous. Arming into that would set a
+    // trap that cannot fire, which is worse than not arming at all: the panel
+    // would say ARMED and mean nothing.
     return root.paired && root.pairedPresent && !root.armed
+           && !root.pairedAmbiguous
   }
 
   function arm() {
@@ -314,6 +330,9 @@ QtObject {
       return
     }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return
+    // The watcher says when it could not describe the drives. That is not the
+    // same as there being none, and acting on it would fire the trap.
+    if (parsed.unreportable === true) return
     if (!Array.isArray(parsed.drives)) return
 
     var cleaned = []

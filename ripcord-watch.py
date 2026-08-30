@@ -344,7 +344,12 @@ def emit(drives):
     # already been handed.
     line = json.dumps({"drives": drives}, separators=(",", ":"))
     if len(line) > 128 * 1024:
-        line = json.dumps({"drives": [], "truncated": True}, separators=(",", ":"))
+        # NOT an empty drive list. Reporting "no drives" because the message
+        # was too big to send is indistinguishable, to the reader, from every
+        # drive having just been unplugged - which fires the trap and locks the
+        # machine. A state we cannot report has to say exactly that, so the
+        # reader can decline to act on it.
+        line = json.dumps({"unreportable": True}, separators=(",", ":"))
     sys.stdout.write(line + "\n")
     sys.stdout.flush()
 

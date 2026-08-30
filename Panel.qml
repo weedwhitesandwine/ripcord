@@ -424,10 +424,14 @@ Ui.Panel {
                 wrapMode: Text.WordWrap
                 visible: !trapSection.choosing && !RipcordState.armed
                          && !RipcordState.canArm()
-                text: "Plug the paired drive in before arming."
-                color: root.mutedColor
+                text: RipcordState.pairedAmbiguous
+                  ? "Two attached drives report the same identity, so pulling the paired one would go unnoticed. Unplug the other before arming."
+                  : "Plug the paired drive in before arming."
+                color: RipcordState.pairedAmbiguous ? root.liveColor : root.mutedColor
+                font.bold: RipcordState.pairedAmbiguous
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
+                font.pixelSize: RipcordState.pairedAmbiguous
+                  ? Style.font.subtitle : Style.font.bodySmall
               }
 
               Text {

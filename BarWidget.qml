@@ -48,10 +48,20 @@ Ui.BarWidget {
   readonly property string tooltip: {
     var parts = ["Ripcord — " + RipcordState.statusText]
     if (RipcordState.paired) {
-      parts.push("Drive: " + (RipcordState.pairedLabel.length > 0
-        ? RipcordState.pairedLabel : RipcordState.pairedUuid))
+      // The drive's name is whatever somebody wrote on a filesystem, and
+      // Omarchy renders tooltipText as AutoText - so a label carrying
+      // <img src="http://…"> would have the shell fetch it. Angle brackets
+      // come out here, and the length is capped, before it goes anywhere near
+      // a sink this plugin does not own.
+      var label = String(RipcordState.pairedLabel)
+        .replace(/[<>]/g, "").slice(0, 128)
+      parts.push("Drive: " + (label.length > 0 ? label : "paired"))
     }
-    if (!RipcordState.watcherUp) parts.push("watcher down")
+    if (!RipcordState.pairedAmbiguous) {
+      if (!RipcordState.watcherUp) parts.push("watcher down")
+    } else {
+      parts.push("two drives share this identity")
+    }
     return parts.join(" · ")
   }
 
