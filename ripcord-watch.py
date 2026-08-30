@@ -29,6 +29,7 @@ import ctypes.util
 import errno
 import json
 import os
+import re
 import select
 import sys
 
@@ -101,6 +102,26 @@ class Inotify:
             self.drain()
             return True
         return False
+
+
+_UDEV_ESCAPE = re.compile(rb"\\x([0-9a-fA-F]{2})")
+
+
+def unescape_udev(name):
+    """Turn udev's escaped link name back into the label the user gave it.
+
+    udev cannot put a space or a slash in a symlink name, so it writes those
+    bytes as \\xNN - a volume called "Pop_OS 24.04 amd64" appears on disk as
+    "Pop_OS\\x2024.04\\x20amd64". Showing that raw makes the pairing list
+    unreadable for any drive whose name has a space in it, which is most of
+    them.
+
+    Decoded a byte at a time and then read as UTF-8, because a non-ASCII
+    character arrives as several escapes that only mean something together.
+    """
+    raw = name.encode("utf-8", "surrogateescape")
+    decoded = _UDEV_ESCAPE.sub(lambda m: bytes([int(m.group(1), 16)]), raw)
+    return decoded.decode("utf-8", "replace")
 
 
 def device_of(link_dir, name):
@@ -178,10 +199,13 @@ def scan():
     for device, uuid in uuids.items():
         if not is_unpluggable(device):
             continue
+        label = labels.get(device, "")
         drives.append(
             {
+                # The UUID is a link name too, but udev never escapes one:
+                # they are hex and dashes by construction.
                 "uuid": uuid,
-                "label": labels.get(device, ""),
+                "label": unescape_udev(label) if label else "",
                 "device": device,
             }
         )

@@ -187,7 +187,10 @@ Ui.Panel {
               Ui.Button {
                 width: parent.width
                 text: RipcordState.armed ? "Disarm" : "Arm"
+                bordered: true
+                foreground: root.barForeground
                 enabled: RipcordState.armed || RipcordState.canArm()
+                opacity: enabled ? 1.0 : 0.45
                 onClicked: {
                   if (RipcordState.armed) RipcordState.disarm()
                   else RipcordState.arm()
@@ -265,6 +268,8 @@ Ui.Panel {
                 width: parent.width
                 visible: RipcordState.paired
                 text: "Unpair"
+                bordered: true
+                foreground: root.barForeground
                 onClicked: RipcordState.unpair()
               }
 
@@ -272,8 +277,12 @@ Ui.Panel {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
+                // One physical stick can carry several filesystems, and each
+                // is listed separately because each has its own identifier.
+                // Pairing any one of them is enough: they all disappear
+                // together when the drive is pulled.
                 text: RipcordState.drives.length > 0
-                  ? "Removable drives attached now — choose one to pair:"
+                  ? "Filesystems on drives you can unplug — choose one to pair:"
                   : "No removable drives attached. Plug one in to pair it."
                 color: root.barForeground
                 opacity: 0.7
@@ -290,7 +299,15 @@ Ui.Panel {
                   text: (modelData.label && modelData.label.length > 0)
                     ? modelData.label
                     : modelData.uuid
+                  // The tooltip is rendered as rich text by the shell, so the
+                  // label - which is whatever somebody named their drive -
+                  // has its angle brackets taken out before it goes in.
+                  tooltipText: (modelData.device + " · " + modelData.uuid)
+                    .replace(/[<>]/g, "")
+                  bordered: true
+                  foreground: root.barForeground
                   enabled: modelData.uuid !== RipcordState.pairedUuid
+                  opacity: enabled ? 1.0 : 0.45
                   onClicked: RipcordState.pair(modelData.uuid, modelData.label)
                 }
               }
@@ -333,7 +350,7 @@ Ui.Panel {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
-                text: "Sleeping is off until you turn it on. Locking alone leaves the machine awake behind a password prompt; sleeping cuts power to everything but memory, and the lock screen is waiting when it wakes."
+                text: "Sleeping stays off until you turn it on."
                 color: root.barForeground
                 opacity: 0.7
                 font.family: root.fontFamily
@@ -360,7 +377,7 @@ Ui.Panel {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
-                text: "While this is on, pulling the drive sends a notification saying what would have happened and nothing else. Leave it on until you have watched it fire once."
+                text: "Leave this on until you have watched it fire once."
                 color: root.barForeground
                 opacity: 0.7
                 font.family: root.fontFamily
