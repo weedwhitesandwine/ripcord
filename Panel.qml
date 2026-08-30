@@ -261,27 +261,35 @@ Ui.Panel {
                       text: root.statusCaps
                       color: root.statusColor
                       font.bold: true
-                      font.letterSpacing: 2.5
+                      font.letterSpacing: 2.0
                       font.family: root.fontFamily
-                      font.pixelSize: Style.font.title
+                      // Deliberately the largest thing in the panel. Derived
+                      // from the theme's scale rather than a fixed pixel size,
+                      // so it still grows with the user's font settings.
+                      font.pixelSize: Math.round(Style.font.title * 1.4)
                     }
                   }
 
                   // A two-column readout under the headline. Fixed-width
                   // labels so the values line up like an instrument panel.
                   Repeater {
-                    model: [
-                      { k: "DRIVE", v: RipcordState.paired
-                          ? root.pairedName : "none paired" },
-                      { k: "LINK", v: !RipcordState.paired ? "—"
-                          : (RipcordState.pairedPresent ? "connected" : "not connected") },
-                      { k: "ON PULL", v: RipcordState.rehearsal
+                    // Only rows that carry something. With nothing paired the
+                    // three of them read "none paired / — / lock", which is
+                    // three lines saying what the headline already said.
+                    // LINK earns its place only when the answer is a problem.
+                    model: {
+                      if (!RipcordState.paired) return []
+                      var rows = [{ k: "DRIVE", v: root.pairedName }]
+                      if (!RipcordState.pairedPresent)
+                        rows.push({ k: "LINK", v: "NOT CONNECTED", alert: true })
+                      rows.push({ k: "ON PULL", v: RipcordState.rehearsal
                           ? "rehearse only"
                           : (RipcordState.lockOnPull && RipcordState.suspendOnPull
                              ? "lock + sleep"
                              : RipcordState.suspendOnPull ? "sleep"
-                             : RipcordState.lockOnPull ? "lock" : "nothing") }
-                    ]
+                             : RipcordState.lockOnPull ? "lock" : "nothing") })
+                      return rows
+                    }
 
                     Row {
                       required property var modelData
@@ -304,10 +312,11 @@ Ui.Panel {
                         width: parent.width - Style.space(64) - Style.spacing.md
                         elide: Text.ElideRight
                         text: modelData.v
-                        color: root.barForeground
+                        color: modelData.alert === true
+                          ? root.liveColor : root.barForeground
                         font.bold: true
                         font.family: root.fontFamily
-                        font.pixelSize: Style.font.bodySmall
+                        font.pixelSize: Style.font.body
                       }
                     }
                   }
@@ -319,6 +328,7 @@ Ui.Panel {
                 width: parent.width
                 wrapMode: Text.WordWrap
                 visible: RipcordState.lastEvent.length > 0
+                         && !RipcordState.armed
                 text: RipcordState.lastEvent
                 color: root.barForeground
                 opacity: root.secondaryOpacity
@@ -343,7 +353,7 @@ Ui.Panel {
               readonly property bool choosing: !RipcordState.paired || root.pickingDrive
 
               Ui.PanelSectionHeader {
-                text: trapSection.choosing ? "PAIR A DRIVE" : "THE TRAP"
+                text: trapSection.choosing ? "CHOOSE YOUR KEY" : "THE TRAP"
                 foreground: root.barForeground
               }
 
@@ -351,7 +361,9 @@ Ui.Panel {
 
               HazardButton {
                 width: parent.width
+                height: Style.space(58)
                 visible: !trapSection.choosing
+                fontSize: Math.round(Style.font.title * 1.3)
                 text: RipcordState.armed ? "STAND DOWN" : "ARM"
                 // Green to engage, red to abort.
                 tint: RipcordState.armed ? root.liveColor : root.goColor
@@ -465,14 +477,14 @@ Ui.Panel {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
-                visible: trapSection.choosing
-                text: RipcordState.drives.length > 0
-                  ? "Drives you can unplug — choose one to pair:"
-                  : "No removable drives attached. Plug one in to pair it."
+                // Only speaks when there is nothing to click. With drives on
+                // screen the rows are the instruction.
+                visible: trapSection.choosing && RipcordState.drives.length === 0
+                text: "Plug a USB drive in."
                 color: root.barForeground
                 opacity: root.secondaryOpacity
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
+                font.pixelSize: Style.font.subtitle
               }
 
               Repeater {
@@ -489,21 +501,34 @@ Ui.Panel {
                     modelData.id === RipcordState.pairedId
 
                   width: mainColumn.width
-                  implicitHeight: driveText.implicitHeight + Style.spacing.md * 2
+                  implicitHeight: driveText.implicitHeight + Style.spacing.lg * 2
                   radius: Style.cornerRadius > 0 ? Style.space(6) : 0
                   color: driveMouse.containsMouse && !driveRow.isPaired
                     ? Qt.rgba(root.goColor.r, root.goColor.g, root.goColor.b, 0.12)
                     : "transparent"
-                  border.color: driveRow.isPaired ? root.goColor : root.barForeground
-                  border.width: Math.max(1, Style.space(driveRow.isPaired ? 2 : 1))
-                  opacity: driveRow.isPaired ? 1.0 : 0.85
+                  border.color: root.goColor
+                  border.width: Math.max(1, Style.space(2))
 
                   Behavior on color { ColorAnimation { duration: 120 } }
+
+                  Text {
+                    id: pairVerb
+                    textFormat: Text.PlainText
+                    anchors.right: parent.right
+                    anchors.rightMargin: Style.spacing.md
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: driveRow.isPaired ? "PAIRED" : "PAIR"
+                    color: root.goColor
+                    font.bold: true
+                    font.letterSpacing: 1.5
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                  }
 
                   Column {
                     id: driveText
                     anchors.left: parent.left
-                    anchors.right: parent.right
+                    anchors.right: pairVerb.left
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.margins: Style.spacing.md
                     spacing: Style.space(2)
@@ -516,7 +541,7 @@ Ui.Panel {
                       color: driveRow.isPaired ? root.goColor : root.barForeground
                       font.bold: true
                       font.family: root.fontFamily
-                      font.pixelSize: Style.font.body
+                      font.pixelSize: Style.font.subtitle
                     }
 
                     Text {
