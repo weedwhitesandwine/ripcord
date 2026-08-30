@@ -397,7 +397,7 @@ Ui.Panel {
                 color: RipcordState.rehearsal ? root.holdColor : root.liveColor
                 font.bold: !RipcordState.rehearsal
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
+                font.pixelSize: Style.font.subtitle
               }
 
               Text {
@@ -405,11 +405,13 @@ Ui.Panel {
                 width: parent.width
                 wrapMode: Text.WordWrap
                 visible: !trapSection.choosing && RipcordState.armed
-                text: "Disarm before unplugging the drive on purpose."
+                text: "Disarm before unplugging if you intentionally want to remove the USB stick."
                 color: root.barForeground
                 opacity: root.secondaryOpacity
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
+                // The two lines that say what will happen and how to avoid it
+                // are the ones worth reading, so they are the ones set larger.
+                font.pixelSize: Style.font.subtitle
               }
 
               // The paired drive, once it is settled, is one line rather than
