@@ -36,11 +36,13 @@ Ui.Panel {
     ? RipcordState.pairedLabel
     : RipcordState.pairedUuid
 
-  // Three states, three colours, taken from the active theme rather than
-  // hardcoded so they still look native whatever is loaded.
-  readonly property color liveColor: RipcordState.themeRed
-  readonly property color goColor: RipcordState.themeGreen
-  readonly property color holdColor: RipcordState.themeAmber
+  // Fixed, on purpose. This panel gets one look of its own instead of taking
+  // the theme's idea of red and green, because the whole job of these three
+  // colours is to mean the same thing every time you look at them - and a
+  // theme's "red" can land anywhere from salmon to maroon.
+  readonly property color liveColor: "#ff4d5e"   // armed for real
+  readonly property color goColor: "#5ddb7f"     // clear to arm
+  readonly property color holdColor: "#ffb454"   // rehearsing
 
   readonly property color statusColor: {
     if (!RipcordState.paired) return root.barForeground
@@ -65,7 +67,7 @@ Ui.Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(Style.space(root.settingsOpen ? 400 : 520))
+    contentHeight: panel.fittedContentHeight(Style.space(root.settingsOpen ? 400 : 600))
 
     Ui.PanelKeyCatcher {
       id: keyCatcher
@@ -155,62 +157,131 @@ Ui.Panel {
               width: parent.width
               spacing: Style.spacing.sm
 
-              Ui.PanelSectionHeader { text: "STATUS"; foreground: root.barForeground }
-
-              Row {
+              // The whole state of the thing in one block: hazard bar, lamp,
+              // the word, and the two facts that qualify it. Bordered and
+              // washed in the state colour so a glance is enough.
+              Rectangle {
+                id: statusBlock
                 width: parent.width
-                spacing: Style.spacing.sm
+                implicitHeight: statusInner.implicitHeight + Style.spacing.lg * 2
+                                + stripes.height
+                radius: Style.cornerRadius > 0 ? Style.space(6) : 0
+                color: Qt.rgba(root.statusColor.r, root.statusColor.g,
+                               root.statusColor.b, 0.10)
+                border.color: root.statusColor
+                border.width: Math.max(1, Style.space(2))
+                clip: true
 
-                // A lamp beside the readout, because a colour word alone is
-                // easy to skim past. It breathes only when the trap is live,
-                // so movement means something rather than being decoration.
-                Rectangle {
-                  id: lamp
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Style.space(10)
-                  height: width
-                  radius: width / 2
-                  color: root.statusColor
-                  visible: RipcordState.paired
+                Behavior on color { ColorAnimation { duration: 200 } }
+                Behavior on border.color { ColorAnimation { duration: 200 } }
 
-                  SequentialAnimation on opacity {
-                    running: RipcordState.armed || RipcordState.awaitingReinsert
-                    loops: Animation.Infinite
-                    alwaysRunToEnd: true
-                    NumberAnimation { to: 0.25; duration: 700; easing.type: Easing.InOutQuad }
-                    NumberAnimation { to: 1.0; duration: 700; easing.type: Easing.InOutQuad }
+                HazardStripes {
+                  id: stripes
+                  anchors.top: parent.top
+                  anchors.left: parent.left
+                  anchors.right: parent.right
+                  anchors.margins: parent.border.width
+                  height: RipcordState.armed || RipcordState.awaitingReinsert
+                    ? Style.space(8) : 0
+                  stripe: root.statusColor
+                  stripeWidth: Style.space(9)
+                  running: RipcordState.armed || RipcordState.awaitingReinsert
+                  visible: height > 0
+
+                  Behavior on height { NumberAnimation { duration: 180 } }
+                }
+
+                Column {
+                  id: statusInner
+                  anchors.top: stripes.bottom
+                  anchors.left: parent.left
+                  anchors.right: parent.right
+                  anchors.margins: Style.spacing.lg
+                  spacing: Style.spacing.sm
+
+                  Row {
+                    width: parent.width
+                    spacing: Style.spacing.md
+
+                    // A lamp beside the readout, because a colour word alone
+                    // is easy to skim past. It breathes only while the trap is
+                    // set, so movement always means something.
+                    Rectangle {
+                      id: lamp
+                      anchors.verticalCenter: parent.verticalCenter
+                      width: Style.space(12)
+                      height: width
+                      radius: width / 2
+                      color: root.statusColor
+
+                      SequentialAnimation on opacity {
+                        running: RipcordState.armed || RipcordState.awaitingReinsert
+                        loops: Animation.Infinite
+                        alwaysRunToEnd: true
+                        NumberAnimation { to: 0.2; duration: 650; easing.type: Easing.InOutQuad }
+                        NumberAnimation { to: 1.0; duration: 650; easing.type: Easing.InOutQuad }
+                      }
+                    }
+
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.verticalCenter: parent.verticalCenter
+                      width: parent.width - lamp.width - Style.spacing.md
+                      elide: Text.ElideRight
+                      text: root.statusCaps
+                      color: root.statusColor
+                      font.bold: true
+                      font.letterSpacing: 2.5
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.title
+                    }
                   }
-                  // Left at full strength when nothing is animating, or a
-                  // paused animation would strand it half faded.
-                  onVisibleChanged: if (!RipcordState.armed) opacity = 1.0
-                }
 
-                Text {
-                  textFormat: Text.PlainText
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: parent.width - (lamp.visible ? lamp.width + Style.spacing.sm : 0)
-                  wrapMode: Text.WordWrap
-                  text: root.statusCaps
-                  color: root.statusColor
-                  font.bold: true
-                  font.letterSpacing: 1.2
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.title
-                }
-              }
+                  // A two-column readout under the headline. Fixed-width
+                  // labels so the values line up like an instrument panel.
+                  Repeater {
+                    model: [
+                      { k: "DRIVE", v: RipcordState.paired
+                          ? root.pairedName : "none paired" },
+                      { k: "LINK", v: !RipcordState.paired ? "—"
+                          : (RipcordState.pairedPresent ? "connected" : "not connected") },
+                      { k: "ON PULL", v: RipcordState.rehearsal
+                          ? "rehearse only"
+                          : (RipcordState.lockOnPull && RipcordState.suspendOnPull
+                             ? "lock + sleep"
+                             : RipcordState.suspendOnPull ? "sleep"
+                             : RipcordState.lockOnPull ? "lock" : "nothing") }
+                    ]
 
-              Text {
-                textFormat: Text.PlainText
-                width: parent.width
-                wrapMode: Text.WordWrap
-                visible: RipcordState.paired
-                text: RipcordState.pairedPresent
-                  ? ("Paired drive is connected — " + root.pairedName)
-                  : ("Paired drive not connected — " + root.pairedName)
-                color: root.barForeground
-                opacity: root.secondaryOpacity
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
+                    Row {
+                      required property var modelData
+                      width: statusInner.width
+                      spacing: Style.spacing.md
+
+                      Text {
+                        textFormat: Text.PlainText
+                        width: Style.space(64)
+                        text: modelData.k
+                        color: root.barForeground
+                        opacity: root.secondaryOpacity
+                        font.letterSpacing: 1.5
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.bodySmall
+                      }
+
+                      Text {
+                        textFormat: Text.PlainText
+                        width: parent.width - Style.space(64) - Style.spacing.md
+                        elide: Text.ElideRight
+                        text: modelData.v
+                        color: root.barForeground
+                        font.bold: true
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.bodySmall
+                      }
+                    }
+                  }
+                }
               }
 
               Text {
@@ -234,18 +305,16 @@ Ui.Panel {
 
               Ui.PanelSectionHeader { text: "THE TRAP"; foreground: root.barForeground }
 
-              Ui.Button {
+              HazardButton {
                 width: parent.width
                 text: RipcordState.armed ? "STAND DOWN" : "ARM"
-                bordered: true
-                // Green to engage, red to abort — and the colour comes from
-                // the theme, so it is this theme's green rather than a green
-                // that fights it.
-                foreground: RipcordState.armed ? root.liveColor : root.goColor
-                accent: RipcordState.armed ? root.liveColor : root.goColor
-                fontSize: Style.font.title
+                // Green to engage, red to abort.
+                tint: RipcordState.armed ? root.liveColor : root.goColor
+                fontFamily: root.fontFamily
+                // The glow runs while it is live, so the button itself is part
+                // of the warning rather than just the thing that caused it.
+                pulsing: RipcordState.armed && !RipcordState.rehearsal
                 enabled: RipcordState.armed || RipcordState.canArm()
-                opacity: enabled ? 1.0 : 0.5
                 onClicked: {
                   if (RipcordState.armed) RipcordState.disarm()
                   else RipcordState.arm()
