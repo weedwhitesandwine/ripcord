@@ -16,9 +16,13 @@ Ui.Panel {
   property var hostWidget: null
 
   property bool settingsOpen: false
+  // True only while re-choosing a drive that is already paired. Reset on open
+  // so the panel never comes back mid-task from a session you have forgotten.
+  property bool pickingDrive: false
 
   function open() {
     root.settingsOpen = false
+    root.pickingDrive = false
     root.controller.show()
   }
 
@@ -323,16 +327,31 @@ Ui.Panel {
               }
             }
 
-            // --------------------------------------------- arming
+            // ----------------------------------- pair, then arm
+            //
+            // One region, two states. Pairing is sequence-first - it has to
+            // happen before arming - but arming is frequency-first: a drive is
+            // paired once and armed every day after. A fixed order can serve
+            // one or the other, so this serves whichever applies right now,
+            // and never shows a control that cannot be used yet.
 
             Column {
+              id: trapSection
               width: parent.width
               spacing: Style.spacing.md
 
-              Ui.PanelSectionHeader { text: "THE TRAP"; foreground: root.barForeground }
+              readonly property bool choosing: !RipcordState.paired || root.pickingDrive
+
+              Ui.PanelSectionHeader {
+                text: trapSection.choosing ? "PAIR A DRIVE" : "THE TRAP"
+                foreground: root.barForeground
+              }
+
+              // ----------------------------------------- the trap
 
               HazardButton {
                 width: parent.width
+                visible: !trapSection.choosing
                 text: RipcordState.armed ? "STAND DOWN" : "ARM"
                 // Green to engage, red to abort.
                 tint: RipcordState.armed ? root.liveColor : root.goColor
@@ -351,10 +370,9 @@ Ui.Panel {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
-                visible: !RipcordState.armed && !RipcordState.canArm()
-                text: !RipcordState.paired
-                  ? "Pair a drive below before arming."
-                  : "Plug the paired drive in before arming."
+                visible: !trapSection.choosing && !RipcordState.armed
+                         && !RipcordState.canArm()
+                text: "Plug the paired drive in before arming."
                 color: root.barForeground
                 opacity: root.secondaryOpacity
                 font.family: root.fontFamily
@@ -365,7 +383,7 @@ Ui.Panel {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
-                visible: RipcordState.armed
+                visible: !trapSection.choosing && RipcordState.armed
                 text: RipcordState.rehearsal
                   ? "Rehearsal is on: pulling the drive sends a notification and does nothing else."
                   : ("Pulling the drive will "
@@ -377,7 +395,6 @@ Ui.Panel {
                             ? "lock the session."
                             : "do nothing — no response is enabled."))
                 color: RipcordState.rehearsal ? root.holdColor : root.liveColor
-                opacity: 1.0
                 font.bold: !RipcordState.rehearsal
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
@@ -387,47 +404,66 @@ Ui.Panel {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
-                visible: RipcordState.armed
+                visible: !trapSection.choosing && RipcordState.armed
                 text: "Disarm before unplugging the drive on purpose."
                 color: root.barForeground
                 opacity: root.secondaryOpacity
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
               }
-            }
 
-            // -------------------------------------------- pairing
+              // The paired drive, once it is settled, is one line rather than
+              // a section: the status block above already names it, so a full
+              // panel of it would be repeating what has just been read.
+              Row {
+                width: parent.width
+                spacing: Style.spacing.sm
+                visible: !trapSection.choosing
 
-            Column {
-              width: parent.width
-              spacing: Style.spacing.md
+                Text {
+                  textFormat: Text.PlainText
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: parent.width - changeButton.width - unpairButton.width
+                         - Style.spacing.sm * 2
+                  elide: Text.ElideRight
+                  text: "Paired: " + root.pairedName
+                  color: root.barForeground
+                  opacity: root.secondaryOpacity
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                }
 
-              Ui.PanelSectionHeader { text: "PAIRED DRIVE"; foreground: root.barForeground }
+                Ui.Button {
+                  id: changeButton
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: "Change"
+                  bordered: true
+                  foreground: root.barForeground
+                  fontSize: Style.font.bodySmall
+                  onClicked: root.pickingDrive = true
+                }
+
+                Ui.Button {
+                  id: unpairButton
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: "Unpair"
+                  bordered: true
+                  foreground: root.barForeground
+                  fontSize: Style.font.bodySmall
+                  onClicked: {
+                    RipcordState.unpair()
+                    root.pickingDrive = false
+                  }
+                }
+              }
+
+              // -------------------------------------- choosing one
 
               Text {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
-                visible: RipcordState.paired
-                text: root.pairedName
-                color: root.barForeground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-              }
-
-              Ui.Button {
-                width: parent.width
-                visible: RipcordState.paired
-                text: "Unpair"
-                bordered: true
-                foreground: root.barForeground
-                onClicked: RipcordState.unpair()
-              }
-
-              Text {
-                textFormat: Text.PlainText
-                width: parent.width
-                wrapMode: Text.WordWrap
+                visible: trapSection.choosing
                 text: RipcordState.drives.length > 0
                   ? "Drives you can unplug — choose one to pair:"
                   : "No removable drives attached. Plug one in to pair it."
@@ -438,7 +474,8 @@ Ui.Panel {
               }
 
               Repeater {
-                model: RipcordState.drives
+                model: (!RipcordState.paired || root.pickingDrive)
+                  ? RipcordState.drives : []
 
                 // One row per physical drive, with the hardware name and size
                 // underneath so a stick is identifiable even when its volume
@@ -503,10 +540,25 @@ Ui.Panel {
                     enabled: !driveRow.isPaired
                     cursorShape: driveRow.isPaired
                       ? Qt.ArrowCursor : Qt.PointingHandCursor
-                    onClicked: RipcordState.pair(driveRow.modelData.id,
-                                                 root.driveTitle(driveRow.modelData))
+                    onClicked: {
+                      RipcordState.pair(driveRow.modelData.id,
+                                        root.driveTitle(driveRow.modelData))
+                      root.pickingDrive = false
+                    }
                   }
                 }
+              }
+
+              // Only offered while changing an existing pairing: with nothing
+              // paired there is nothing to go back to.
+              Ui.Button {
+                width: parent.width
+                visible: root.pickingDrive && RipcordState.paired
+                text: "Cancel"
+                bordered: true
+                foreground: root.barForeground
+                fontSize: Style.font.bodySmall
+                onClicked: root.pickingDrive = false
               }
             }
           }
