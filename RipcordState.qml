@@ -528,6 +528,10 @@ QtObject {
   Component.onCompleted: {
     root.ensureStateDir.running = true
     root.settingsReader.running = true
+    // Read the palette once at startup. The Connections above only fire when
+    // the theme *changes*, so without this the plugin sat on its fallbacks for
+    // the whole session and Arm came out accent-blue instead of theme-green.
+    root.reloadPalette()
     root.startWatcher()
   }
 }
