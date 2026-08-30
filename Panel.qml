@@ -36,6 +36,11 @@ Ui.Panel {
 
   readonly property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
 
+  // Our own surface means our own text colours; the bar's foreground is tuned
+  // for the bar's background, which is no longer what is behind this.
+  readonly property color textColor: RipcordState.textColor
+  readonly property color mutedColor: RipcordState.mutedTextColor
+
   readonly property string pairedName: RipcordState.pairedLabel.length > 0
     ? RipcordState.pairedLabel
     : "paired drive"
@@ -66,28 +71,21 @@ Ui.Panel {
     return parts.join(" · ")
   }
 
-  // Fixed, on purpose. This panel gets one look of its own instead of taking
-  // the theme's idea of red and green, because the whole job of these three
-  // colours is to mean the same thing every time you look at them - and a
-  // theme's "red" can land anywhere from salmon to maroon.
-  readonly property color liveColor: "#ff4d5e"   // armed for real
-  readonly property color goColor: "#5ddb7f"     // clear to arm
-  readonly property color holdColor: "#ffb454"   // rehearsing
+  // Owned by RipcordState so the bar icon and this panel always agree, and so
+  // the light-background variants are chosen in one place.
+  readonly property color liveColor: RipcordState.liveColor
+  readonly property color goColor: RipcordState.goColor
+  readonly property color holdColor: RipcordState.holdColor
 
   readonly property color statusColor: {
-    if (!RipcordState.paired) return root.barForeground
+    if (!RipcordState.paired) return root.textColor
     if (RipcordState.awaitingReinsert) return root.liveColor
-    if (!RipcordState.armed) return root.barForeground
+    if (!RipcordState.armed) return root.textColor
     return RipcordState.rehearsal ? root.holdColor : root.liveColor
   }
 
   readonly property string statusCaps: RipcordState.statusText.toUpperCase()
 
-  // Secondary text is the theme's own foreground rather than a dimmed version
-  // of it: grey on a dark background is exactly what this should not do.
-  readonly property real secondaryOpacity: 0.92
-
-  // ---------------------------------------------------------------- view
 
   Ui.KeyboardPanel {
     id: panel
@@ -108,12 +106,26 @@ Ui.Panel {
       Item {
         anchors.fill: parent
 
+        // Ripcord's own surface, painted over the shell's popup background.
+        // The negative margin covers the card's padding, which would otherwise
+        // leave a ring of theme colour around the edge.
+        Rectangle {
+          anchors.fill: parent
+          anchors.margins: -panel.padding
+          radius: Style.cornerRadius
+          color: RipcordState.surfaceColor
+          z: -1
+
+          Behavior on color { ColorAnimation { duration: 160 } }
+        }
+
         // ----------------------------------------------------- header
 
         Row {
           id: headerRow
           width: parent.width
-          height: Math.max(titleText.implicitHeight, gearButton.implicitHeight)
+          height: Math.max(titleText.implicitHeight,
+                          Math.max(gearButton.implicitHeight, modeButton.implicitHeight))
           spacing: Style.spacing.sm
 
           Text {
@@ -121,7 +133,7 @@ Ui.Panel {
             textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             text: "Ripcord"
-            color: root.barForeground
+            color: root.textColor
             font.bold: true
             font.family: root.fontFamily
             font.pixelSize: Style.font.subtitle
@@ -141,9 +153,22 @@ Ui.Panel {
 
           Item {
             width: Math.max(0, headerRow.width - titleText.width - gearButton.width
+                             - modeButton.width - Style.spacing.sm
                              - (warnText.visible ? warnText.width + Style.spacing.sm : 0)
                              - Style.spacing.sm)
             height: 1
+          }
+
+          Ui.PanelActionButton {
+            id: modeButton
+            anchors.verticalCenter: parent.verticalCenter
+            // Nerd Font glyphs rather than emoji, so they take the colour they
+            // are given instead of rendering as colour bitmaps.
+            iconText: RipcordState.lightMode ? "" : ""
+            tooltipText: RipcordState.lightMode
+              ? "Switch to dark" : "Switch to light"
+            foreground: root.textColor
+            onClicked: RipcordState.toggleAppearance()
           }
 
           Ui.PanelActionButton {
@@ -151,7 +176,7 @@ Ui.Panel {
             anchors.verticalCenter: parent.verticalCenter
             iconText: root.settingsOpen ? "✕" : "󰒓"
             tooltipText: root.settingsOpen ? "Back" : "Settings"
-            foreground: root.barForeground
+            foreground: root.textColor
             onClicked: root.settingsOpen = !root.settingsOpen
           }
         }
@@ -300,8 +325,7 @@ Ui.Panel {
                         textFormat: Text.PlainText
                         width: Style.space(64)
                         text: modelData.k
-                        color: root.barForeground
-                        opacity: root.secondaryOpacity
+                        color: root.mutedColor
                         font.letterSpacing: 1.5
                         font.family: root.fontFamily
                         font.pixelSize: Style.font.bodySmall
@@ -313,7 +337,7 @@ Ui.Panel {
                         elide: Text.ElideRight
                         text: modelData.v
                         color: modelData.alert === true
-                          ? root.liveColor : root.barForeground
+                          ? root.liveColor : root.textColor
                         font.bold: true
                         font.family: root.fontFamily
                         font.pixelSize: Style.font.body
@@ -330,8 +354,7 @@ Ui.Panel {
                 visible: RipcordState.lastEvent.length > 0
                          && !RipcordState.armed
                 text: RipcordState.lastEvent
-                color: root.barForeground
-                opacity: root.secondaryOpacity
+                color: root.mutedColor
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
               }
@@ -354,7 +377,7 @@ Ui.Panel {
 
               Ui.PanelSectionHeader {
                 text: trapSection.choosing ? "CHOOSE YOUR KEY" : "THE TRAP"
-                foreground: root.barForeground
+                foreground: root.textColor
               }
 
               // ----------------------------------------- the trap
@@ -385,8 +408,7 @@ Ui.Panel {
                 visible: !trapSection.choosing && !RipcordState.armed
                          && !RipcordState.canArm()
                 text: "Plug the paired drive in before arming."
-                color: root.barForeground
-                opacity: root.secondaryOpacity
+                color: root.mutedColor
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
               }
@@ -418,8 +440,7 @@ Ui.Panel {
                 wrapMode: Text.WordWrap
                 visible: !trapSection.choosing && RipcordState.armed
                 text: "Disarm before unplugging if you intentionally want to remove the USB stick."
-                color: root.barForeground
-                opacity: root.secondaryOpacity
+                color: root.mutedColor
                 font.family: root.fontFamily
                 // The two lines that say what will happen and how to avoid it
                 // are the ones worth reading, so they are the ones set larger.
@@ -441,8 +462,7 @@ Ui.Panel {
                          - Style.spacing.sm * 2
                   elide: Text.ElideRight
                   text: "Paired: " + root.pairedName
-                  color: root.barForeground
-                  opacity: root.secondaryOpacity
+                  color: root.mutedColor
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall
                 }
@@ -452,7 +472,7 @@ Ui.Panel {
                   anchors.verticalCenter: parent.verticalCenter
                   text: "Change"
                   bordered: true
-                  foreground: root.barForeground
+                  foreground: root.textColor
                   fontSize: Style.font.bodySmall
                   onClicked: root.pickingDrive = true
                 }
@@ -462,7 +482,7 @@ Ui.Panel {
                   anchors.verticalCenter: parent.verticalCenter
                   text: "Unpair"
                   bordered: true
-                  foreground: root.barForeground
+                  foreground: root.textColor
                   fontSize: Style.font.bodySmall
                   onClicked: {
                     RipcordState.unpair()
@@ -481,8 +501,7 @@ Ui.Panel {
                 // screen the rows are the instruction.
                 visible: trapSection.choosing && RipcordState.drives.length === 0
                 text: "Plug a USB drive in."
-                color: root.barForeground
-                opacity: root.secondaryOpacity
+                color: root.mutedColor
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.subtitle
               }
@@ -538,7 +557,7 @@ Ui.Panel {
                       width: parent.width
                       elide: Text.ElideRight
                       text: root.driveTitle(driveRow.modelData)
-                      color: driveRow.isPaired ? root.goColor : root.barForeground
+                      color: driveRow.isPaired ? root.goColor : root.textColor
                       font.bold: true
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.subtitle
@@ -553,8 +572,7 @@ Ui.Panel {
                         var sub = root.driveSubtitle(driveRow.modelData)
                         return driveRow.isPaired ? (sub + "  ·  PAIRED") : sub
                       }
-                      color: driveRow.isPaired ? root.goColor : root.barForeground
-                      opacity: root.secondaryOpacity
+                      color: driveRow.isPaired ? root.goColor : root.mutedColor
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.bodySmall
                     }
@@ -583,7 +601,7 @@ Ui.Panel {
                 visible: root.pickingDrive && RipcordState.paired
                 text: "Cancel"
                 bordered: true
-                foreground: root.barForeground
+                foreground: root.textColor
                 fontSize: Style.font.bodySmall
                 onClicked: root.pickingDrive = false
               }
@@ -602,13 +620,13 @@ Ui.Panel {
               width: parent.width
               spacing: Style.spacing.md
 
-              Ui.PanelSectionHeader { text: "RESPONSE"; foreground: root.barForeground }
+              Ui.PanelSectionHeader { text: "RESPONSE"; foreground: root.textColor }
 
               Ui.Toggle {
                 width: parent.width
                 label: "Lock the session"
                 description: "Leaves the machine awake behind a password prompt"
-                foreground: root.barForeground
+                foreground: root.textColor
                 checked: RipcordState.lockOnPull
                 onClicked: RipcordState.lockOnPull = !RipcordState.lockOnPull
               }
@@ -617,7 +635,7 @@ Ui.Panel {
                 width: parent.width
                 label: "Put the machine to sleep"
                 description: "Cuts power to everything but memory; the lock screen is waiting when it wakes"
-                foreground: root.barForeground
+                foreground: root.textColor
                 checked: RipcordState.suspendOnPull
                 onClicked: RipcordState.suspendOnPull = !RipcordState.suspendOnPull
               }
@@ -627,8 +645,7 @@ Ui.Panel {
                 width: parent.width
                 wrapMode: Text.WordWrap
                 text: "Sleeping stays off until you turn it on."
-                color: root.barForeground
-                opacity: root.secondaryOpacity
+                color: root.mutedColor
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
               }
@@ -638,13 +655,13 @@ Ui.Panel {
               width: parent.width
               spacing: Style.spacing.md
 
-              Ui.PanelSectionHeader { text: "REHEARSAL"; foreground: root.barForeground }
+              Ui.PanelSectionHeader { text: "REHEARSAL"; foreground: root.textColor }
 
               Ui.Toggle {
                 width: parent.width
                 label: "Rehearse instead of responding"
                 description: "Pulling the drive only sends a notification"
-                foreground: root.barForeground
+                foreground: root.textColor
                 checked: RipcordState.rehearsal
                 onClicked: RipcordState.rehearsal = !RipcordState.rehearsal
               }
@@ -654,8 +671,7 @@ Ui.Panel {
                 width: parent.width
                 wrapMode: Text.WordWrap
                 text: "Leave this on until you have watched it fire once."
-                color: root.barForeground
-                opacity: root.secondaryOpacity
+                color: root.mutedColor
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
               }
@@ -665,15 +681,14 @@ Ui.Panel {
               width: parent.width
               spacing: Style.spacing.md
 
-              Ui.PanelSectionHeader { text: "LIMITS"; foreground: root.barForeground }
+              Ui.PanelSectionHeader { text: "LIMITS"; foreground: root.textColor }
 
               Text {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
                 text: "Ripcord runs inside the desktop shell. If the shell stops, so does the watching — the bar icon is there so you can see whether it is armed. Arming is never restored automatically after a restart."
-                color: root.barForeground
-                opacity: root.secondaryOpacity
+                color: root.mutedColor
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
               }

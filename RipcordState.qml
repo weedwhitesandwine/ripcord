@@ -345,74 +345,32 @@ QtObject {
     root.evaluate()
   }
 
-  // --------------------------------------------------------- theme palette
+  // ------------------------------------------------------------ appearance
   //
-  // The shell keeps only five colours live in memory - foreground, background,
-  // accent, urgent and muted - and throws the named hues away. Arm and Disarm
-  // want a real green and a real red, so the palette is read from the theme's
-  // own file and the plugin tracks whatever theme is active rather than
-  // hardcoding two colours that will clash with half of them.
-  readonly property string palettePath: root.stateHome + "/omarchy/current/theme/colors.toml"
-  readonly property int paletteCeiling: 64 * 1024
+  // Ripcord paints its own surface rather than sitting on the theme's popup
+  // background. That is a deliberate break from the rest of the shell: the
+  // panel's whole job is to be unmistakable at a glance, and it cannot promise
+  // that when the ground under it changes with every theme.
+  //
+  // Two modes, chosen by the user with the sun/moon in the panel header rather
+  // than inferred, so it never disagrees with what they wanted.
+  property string appearance: "dark"      // dark | light
+  readonly property bool lightMode: root.appearance === "light"
 
-  // Fallbacks are the two the shell does keep, so the panel is never colourless
-  // even on a theme that ships no named hues.
-  property color themeRed: Color.urgent
-  property color themeGreen: Color.accent
-  property color themeAmber: Color.accent
-  property bool paletteLoaded: false
-
-  property Process paletteReader: Process {
-    command: ["python3", "-c", root.safeRead,
-              root.palettePath, String(root.paletteCeiling)]
-    stdout: StdioCollector {
-      id: paletteOut
-      waitForEnd: true
-      onStreamFinished: if (paletteOut.text !== "") root.applyPalette(paletteOut.text)
-    }
+  function toggleAppearance() {
+    root.appearance = root.lightMode ? "dark" : "light"
   }
 
-  function applyPalette(text) {
-    if (typeof text !== "string" || text.length > root.paletteCeiling) return
+  readonly property color surfaceColor: root.lightMode ? "#f7f5f1" : "#0f1b2e"
+  readonly property color textColor: root.lightMode ? "#10151c" : "#eef2f7"
+  readonly property color mutedTextColor: root.lightMode ? "#41505f" : "#b9c4d4"
 
-    var found = ({})
-    var lines = text.split("\n").slice(0, 400)
-    for (var i = 0; i < lines.length; i++) {
-      // key = "#rrggbb", which is the whole of the format this needs.
-      var match = /^\s*([A-Za-z0-9_]+)\s*=\s*"(#[0-9A-Fa-f]{3,8})"/.exec(lines[i])
-      if (match) found[match[1].toLowerCase()] = match[2]
-    }
-
-    // Omarchy's own themes name their hues; many third-party themes ship the
-    // ANSI numbering instead. Both are read, words first.
-    function pick(named, ansi, bright, fallback) {
-      if (found[named]) return found[named]
-      if (found[ansi]) return found[ansi]
-      if (found[bright]) return found[bright]
-      return fallback
-    }
-
-    root.themeRed = pick("red", "color1", "bright_red", Color.urgent)
-    root.themeGreen = pick("green", "color2", "bright_green", Color.accent)
-    root.themeAmber = pick("yellow", "color3", "orange", Color.accent)
-    root.paletteLoaded = true
-  }
-
-  // A file watch on the theme directory does not survive a theme switch: the
-  // whole directory is replaced, so the watch dies with the old inode. The
-  // shell does keep its own five colours current, so a change in those is the
-  // signal to go and read the file again.
-  property Connections themeWatch: Connections {
-    target: Color
-    function onForegroundChanged() { root.reloadPalette() }
-    function onBackgroundChanged() { root.reloadPalette() }
-    function onAccentChanged() { root.reloadPalette() }
-  }
-
-  function reloadPalette() {
-    root.paletteReader.running = false
-    root.paletteReader.running = true
-  }
+  // Every one of these clears 4.5:1 against its own background - checked
+  // against the two surfaces above rather than assumed, which is the whole
+  // advantage of owning the background instead of borrowing it.
+  readonly property color liveColor: root.lightMode ? "#b3121f" : "#ff6b78"
+  readonly property color goColor: root.lightMode ? "#116b33" : "#5ddb7f"
+  readonly property color holdColor: root.lightMode ? "#8a5000" : "#ffb454"
 
   // -------------------------------------------------------------- settings
   //
@@ -485,6 +443,8 @@ QtObject {
       if (typeof parsed.lockOnPull === "boolean") root.lockOnPull = parsed.lockOnPull
       if (typeof parsed.suspendOnPull === "boolean") root.suspendOnPull = parsed.suspendOnPull
       if (typeof parsed.rehearsal === "boolean") root.rehearsal = parsed.rehearsal
+      if (parsed.appearance === "dark" || parsed.appearance === "light")
+        root.appearance = parsed.appearance
     }
     root.settingsLoaded = true
   }
@@ -511,7 +471,8 @@ QtObject {
       pairedLabel: root.pairedLabel,
       lockOnPull: root.lockOnPull,
       suspendOnPull: root.suspendOnPull,
-      rehearsal: root.rehearsal
+      rehearsal: root.rehearsal,
+      appearance: root.appearance
     }, null, 2) + "\n")
   }
 
@@ -535,14 +496,11 @@ QtObject {
   onLockOnPullChanged: root.scheduleSettingsSave()
   onSuspendOnPullChanged: root.scheduleSettingsSave()
   onRehearsalChanged: root.scheduleSettingsSave()
+  onAppearanceChanged: root.scheduleSettingsSave()
 
   Component.onCompleted: {
     root.ensureStateDir.running = true
     root.settingsReader.running = true
-    // Read the palette once at startup. The Connections above only fire when
-    // the theme *changes*, so without this the plugin sat on its fallbacks for
-    // the whole session and Arm came out accent-blue instead of theme-green.
-    root.reloadPalette()
     root.startWatcher()
   }
 }

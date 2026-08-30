@@ -61,11 +61,11 @@ Ui.BarWidget {
   readonly property bool alert: (RipcordState.armed && !RipcordState.rehearsal)
     || (RipcordState.armed && !RipcordState.watcherUp)
 
-  // The theme's own red while the trap is live, amber while it is only
+  // Red while the trap is live, amber while it is only
   // rehearsing, and the ordinary bar foreground when it is off. A padlock that
   // changes shape *and* colour is readable out of the corner of an eye.
   readonly property color stateColor: RipcordState.armed
-    ? (RipcordState.rehearsal ? RipcordState.themeAmber : RipcordState.themeRed)
+    ? (RipcordState.rehearsal ? RipcordState.holdColor : RipcordState.liveColor)
     : (root.bar ? root.bar.barForeground : Color.foreground)
 
   implicitWidth: button.implicitWidth
@@ -91,7 +91,7 @@ Ui.BarWidget {
     text: root.glyph
     tooltipText: root.tooltip
     active: root.alert
-    // The theme's own red while the trap is live, amber while it is only
+    // Red while the trap is live, amber while it is only
     // rehearsing, and the ordinary bar foreground when it is off. A padlock
     // that changes shape *and* colour is readable out of the corner of an eye.
     // Both, because WidgetButton uses activeColor in place of foreground
