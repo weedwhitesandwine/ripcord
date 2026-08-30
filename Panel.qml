@@ -314,15 +314,19 @@ Ui.Panel {
               Ui.Toggle {
                 width: parent.width
                 label: "Lock the session"
+                description: "Leaves the machine awake behind a password prompt"
+                foreground: root.barForeground
                 checked: RipcordState.lockOnPull
-                onToggled: RipcordState.lockOnPull = !RipcordState.lockOnPull
+                onClicked: RipcordState.lockOnPull = !RipcordState.lockOnPull
               }
 
               Ui.Toggle {
                 width: parent.width
                 label: "Put the machine to sleep"
+                description: "Cuts power to everything but memory; the lock screen is waiting when it wakes"
+                foreground: root.barForeground
                 checked: RipcordState.suspendOnPull
-                onToggled: RipcordState.suspendOnPull = !RipcordState.suspendOnPull
+                onClicked: RipcordState.suspendOnPull = !RipcordState.suspendOnPull
               }
 
               Text {
@@ -346,8 +350,10 @@ Ui.Panel {
               Ui.Toggle {
                 width: parent.width
                 label: "Rehearse instead of responding"
+                description: "Pulling the drive only sends a notification"
+                foreground: root.barForeground
                 checked: RipcordState.rehearsal
-                onToggled: RipcordState.rehearsal = !RipcordState.rehearsal
+                onClicked: RipcordState.rehearsal = !RipcordState.rehearsal
               }
 
               Text {
