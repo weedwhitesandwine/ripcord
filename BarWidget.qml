@@ -61,6 +61,13 @@ Ui.BarWidget {
   readonly property bool alert: (RipcordState.armed && !RipcordState.rehearsal)
     || (RipcordState.armed && !RipcordState.watcherUp)
 
+  // The theme's own red while the trap is live, amber while it is only
+  // rehearsing, and the ordinary bar foreground when it is off. A padlock that
+  // changes shape *and* colour is readable out of the corner of an eye.
+  readonly property color stateColor: RipcordState.armed
+    ? (RipcordState.rehearsal ? RipcordState.themeAmber : RipcordState.themeRed)
+    : (root.bar ? root.bar.barForeground : Color.foreground)
+
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -84,6 +91,14 @@ Ui.BarWidget {
     text: root.glyph
     tooltipText: root.tooltip
     active: root.alert
+    // The theme's own red while the trap is live, amber while it is only
+    // rehearsing, and the ordinary bar foreground when it is off. A padlock
+    // that changes shape *and* colour is readable out of the corner of an eye.
+    // Both, because WidgetButton uses activeColor in place of foreground
+    // whenever it is active — setting only one leaves the armed icon the
+    // theme's urgent colour instead of the one chosen here.
+    foreground: root.stateColor
+    activeColor: root.stateColor
     fixedHeight: root.bar && root.bar.vertical ? Style.space(26) : -1
     onPressed: function (b) {
       if (b === Qt.LeftButton) root.toggle()

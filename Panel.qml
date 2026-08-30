@@ -36,6 +36,25 @@ Ui.Panel {
     ? RipcordState.pairedLabel
     : RipcordState.pairedUuid
 
+  // Three states, three colours, taken from the active theme rather than
+  // hardcoded so they still look native whatever is loaded.
+  readonly property color liveColor: RipcordState.themeRed
+  readonly property color goColor: RipcordState.themeGreen
+  readonly property color holdColor: RipcordState.themeAmber
+
+  readonly property color statusColor: {
+    if (!RipcordState.paired) return root.barForeground
+    if (RipcordState.awaitingReinsert) return root.liveColor
+    if (!RipcordState.armed) return root.barForeground
+    return RipcordState.rehearsal ? root.holdColor : root.liveColor
+  }
+
+  readonly property string statusCaps: RipcordState.statusText.toUpperCase()
+
+  // Secondary text is the theme's own foreground rather than a dimmed version
+  // of it: grey on a dark background is exactly what this should not do.
+  readonly property real secondaryOpacity: 0.92
+
   // ---------------------------------------------------------------- view
 
   Ui.KeyboardPanel {
@@ -82,9 +101,10 @@ Ui.Panel {
             anchors.verticalCenter: parent.verticalCenter
             visible: !RipcordState.watcherUp
             text: "watcher down"
-            color: Color.urgent
+            color: root.liveColor
+            font.bold: true
             font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
+            font.pixelSize: Style.font.bodySmall
           }
 
           Item {
@@ -137,16 +157,46 @@ Ui.Panel {
 
               Ui.PanelSectionHeader { text: "STATUS"; foreground: root.barForeground }
 
-              Text {
-                textFormat: Text.PlainText
+              Row {
                 width: parent.width
-                wrapMode: Text.WordWrap
-                text: RipcordState.statusText
-                color: RipcordState.armed && !RipcordState.rehearsal
-                  ? Color.urgent : root.barForeground
-                font.bold: true
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
+                spacing: Style.spacing.sm
+
+                // A lamp beside the readout, because a colour word alone is
+                // easy to skim past. It breathes only when the trap is live,
+                // so movement means something rather than being decoration.
+                Rectangle {
+                  id: lamp
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(10)
+                  height: width
+                  radius: width / 2
+                  color: root.statusColor
+                  visible: RipcordState.paired
+
+                  SequentialAnimation on opacity {
+                    running: RipcordState.armed || RipcordState.awaitingReinsert
+                    loops: Animation.Infinite
+                    alwaysRunToEnd: true
+                    NumberAnimation { to: 0.25; duration: 700; easing.type: Easing.InOutQuad }
+                    NumberAnimation { to: 1.0; duration: 700; easing.type: Easing.InOutQuad }
+                  }
+                  // Left at full strength when nothing is animating, or a
+                  // paused animation would strand it half faded.
+                  onVisibleChanged: if (!RipcordState.armed) opacity = 1.0
+                }
+
+                Text {
+                  textFormat: Text.PlainText
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: parent.width - (lamp.visible ? lamp.width + Style.spacing.sm : 0)
+                  wrapMode: Text.WordWrap
+                  text: root.statusCaps
+                  color: root.statusColor
+                  font.bold: true
+                  font.letterSpacing: 1.2
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.title
+                }
               }
 
               Text {
@@ -158,9 +208,9 @@ Ui.Panel {
                   ? ("Paired drive is connected — " + root.pairedName)
                   : ("Paired drive not connected — " + root.pairedName)
                 color: root.barForeground
-                opacity: 0.75
+                opacity: root.secondaryOpacity
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.bodySmall
               }
 
               Text {
@@ -170,9 +220,9 @@ Ui.Panel {
                 visible: RipcordState.lastEvent.length > 0
                 text: RipcordState.lastEvent
                 color: root.barForeground
-                opacity: 0.6
+                opacity: root.secondaryOpacity
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.bodySmall
               }
             }
 
@@ -186,11 +236,16 @@ Ui.Panel {
 
               Ui.Button {
                 width: parent.width
-                text: RipcordState.armed ? "Disarm" : "Arm"
+                text: RipcordState.armed ? "STAND DOWN" : "ARM"
                 bordered: true
-                foreground: root.barForeground
+                // Green to engage, red to abort — and the colour comes from
+                // the theme, so it is this theme's green rather than a green
+                // that fights it.
+                foreground: RipcordState.armed ? root.liveColor : root.goColor
+                accent: RipcordState.armed ? root.liveColor : root.goColor
+                fontSize: Style.font.title
                 enabled: RipcordState.armed || RipcordState.canArm()
-                opacity: enabled ? 1.0 : 0.45
+                opacity: enabled ? 1.0 : 0.5
                 onClicked: {
                   if (RipcordState.armed) RipcordState.disarm()
                   else RipcordState.arm()
@@ -206,9 +261,9 @@ Ui.Panel {
                   ? "Pair a drive below before arming."
                   : "Plug the paired drive in before arming."
                 color: root.barForeground
-                opacity: 0.7
+                opacity: root.secondaryOpacity
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.bodySmall
               }
 
               Text {
@@ -226,10 +281,11 @@ Ui.Panel {
                           : RipcordState.lockOnPull
                             ? "lock the session."
                             : "do nothing — no response is enabled."))
-                color: RipcordState.rehearsal ? root.barForeground : Color.urgent
-                opacity: RipcordState.rehearsal ? 0.7 : 1.0
+                color: RipcordState.rehearsal ? root.holdColor : root.liveColor
+                opacity: 1.0
+                font.bold: !RipcordState.rehearsal
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.bodySmall
               }
 
               Text {
@@ -239,9 +295,9 @@ Ui.Panel {
                 visible: RipcordState.armed
                 text: "Disarm before unplugging the drive on purpose."
                 color: root.barForeground
-                opacity: 0.7
+                opacity: root.secondaryOpacity
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.bodySmall
               }
             }
 
@@ -285,9 +341,9 @@ Ui.Panel {
                   ? "Filesystems on drives you can unplug — choose one to pair:"
                   : "No removable drives attached. Plug one in to pair it."
                 color: root.barForeground
-                opacity: 0.7
+                opacity: root.secondaryOpacity
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.bodySmall
               }
 
               Repeater {
@@ -352,9 +408,9 @@ Ui.Panel {
                 wrapMode: Text.WordWrap
                 text: "Sleeping stays off until you turn it on."
                 color: root.barForeground
-                opacity: 0.7
+                opacity: root.secondaryOpacity
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.bodySmall
               }
             }
 
@@ -379,9 +435,9 @@ Ui.Panel {
                 wrapMode: Text.WordWrap
                 text: "Leave this on until you have watched it fire once."
                 color: root.barForeground
-                opacity: 0.7
+                opacity: root.secondaryOpacity
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.bodySmall
               }
             }
 
@@ -397,9 +453,9 @@ Ui.Panel {
                 wrapMode: Text.WordWrap
                 text: "Ripcord runs inside the desktop shell. If the shell stops, so does the watching — the bar icon is there so you can see whether it is armed. Arming is never restored automatically after a restart."
                 color: root.barForeground
-                opacity: 0.7
+                opacity: root.secondaryOpacity
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.bodySmall
               }
             }
           }

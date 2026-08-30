@@ -2,6 +2,9 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+// For the Color singleton: the palette fallbacks and the theme-change signal
+// both come from it.
+import qs.Commons
 
 // The single owner of the drive watcher, the pairing, and the trap itself.
 //
@@ -174,12 +177,65 @@ QtObject {
 
   property Process notifier: Process { running: false }
 
+  // omarchy-system-lock is the one that works on Omarchy Quattro: it drives
+  // the shell's own lock service and also locks 1Password, which is exactly
+  // what someone walking off with the machine should not find open.
+  //
+  // loginctl is second and not first for a measured reason: on Quattro it
+  // exits 0 while doing nothing at all, so it is neither a working lock nor a
+  // detectable failure. Ordering by what actually locks, rather than by what
+  // is most standard, is the difference between locking and only appearing to.
   property Process locker: Process {
-    // loginctl covers systemd sessions, which is every Omarchy install; the
-    // fallback exists for a session where it is refused.
-    command: ["sh", "-c",
-              "loginctl lock-session 2>/dev/null || hyprlock &"]
+    command: ["sh", "-c", [
+      'if command -v omarchy-system-lock >/dev/null 2>&1; then',
+      '  exec omarchy-system-lock',
+      'elif command -v hyprlock >/dev/null 2>&1; then',
+      '  exec hyprlock',
+      'elif command -v loginctl >/dev/null 2>&1; then',
+      '  exec loginctl lock-session',
+      'else',
+      '  exit 127',
+      'fi'
+    ].join("\n")]
     running: false
+    onExited: function (code, status) {
+      if (code !== 0) {
+        root.lastEvent = "Lock failed — the session did not lock"
+        root.notify("Ripcord", "The drive was removed but the session could not be locked.")
+        return
+      }
+      // Exit 0 is not proof: the check below is what decides.
+      root.lockVerifyTimer.restart()
+    }
+  }
+
+  // A lock command that succeeds and leaves the session unlocked is the worst
+  // outcome this plugin has, because everything looks like it worked. Asking
+  // the compositor afterwards turns that into something the user is told about.
+  property Timer lockVerifyTimer: Timer {
+    repeat: false
+    interval: 1500
+    onTriggered: {
+      root.lockVerifier.running = false
+      root.lockVerifier.running = true
+    }
+  }
+
+  property Process lockVerifier: Process {
+    command: ["sh", "-c",
+              "command -v omarchy-hyprland-session-locked >/dev/null 2>&1 "
+              + "&& omarchy-hyprland-session-locked; exit $?"]
+    running: false
+    onExited: function (code, status) {
+      // 0 locked, 1 unlocked, 2 undetermined, 127 no such command. Only a
+      // definite "unlocked" is worth shouting about; the rest cannot tell us
+      // anything and a false alarm would train the user to ignore it.
+      if (code === 1) {
+        root.lastEvent = "Lock did not take — session is still unlocked"
+        root.notify("Ripcord",
+                    "The drive was removed and the lock was requested, but the session is still unlocked.")
+      }
+    }
   }
 
   property Process suspender: Process {
@@ -279,6 +335,75 @@ QtObject {
     // pairedPresent is derived, so its change handler runs the trap; this
     // covers the case where the set changed without that binding flipping.
     root.evaluate()
+  }
+
+  // --------------------------------------------------------- theme palette
+  //
+  // The shell keeps only five colours live in memory - foreground, background,
+  // accent, urgent and muted - and throws the named hues away. Arm and Disarm
+  // want a real green and a real red, so the palette is read from the theme's
+  // own file and the plugin tracks whatever theme is active rather than
+  // hardcoding two colours that will clash with half of them.
+  readonly property string palettePath: root.stateHome + "/omarchy/current/theme/colors.toml"
+  readonly property int paletteCeiling: 64 * 1024
+
+  // Fallbacks are the two the shell does keep, so the panel is never colourless
+  // even on a theme that ships no named hues.
+  property color themeRed: Color.urgent
+  property color themeGreen: Color.accent
+  property color themeAmber: Color.accent
+  property bool paletteLoaded: false
+
+  property Process paletteReader: Process {
+    command: ["python3", "-c", root.safeRead,
+              root.palettePath, String(root.paletteCeiling)]
+    stdout: StdioCollector {
+      id: paletteOut
+      waitForEnd: true
+      onStreamFinished: if (paletteOut.text !== "") root.applyPalette(paletteOut.text)
+    }
+  }
+
+  function applyPalette(text) {
+    if (typeof text !== "string" || text.length > root.paletteCeiling) return
+
+    var found = ({})
+    var lines = text.split("\n").slice(0, 400)
+    for (var i = 0; i < lines.length; i++) {
+      // key = "#rrggbb", which is the whole of the format this needs.
+      var match = /^\s*([A-Za-z0-9_]+)\s*=\s*"(#[0-9A-Fa-f]{3,8})"/.exec(lines[i])
+      if (match) found[match[1].toLowerCase()] = match[2]
+    }
+
+    // Omarchy's own themes name their hues; many third-party themes ship the
+    // ANSI numbering instead. Both are read, words first.
+    function pick(named, ansi, bright, fallback) {
+      if (found[named]) return found[named]
+      if (found[ansi]) return found[ansi]
+      if (found[bright]) return found[bright]
+      return fallback
+    }
+
+    root.themeRed = pick("red", "color1", "bright_red", Color.urgent)
+    root.themeGreen = pick("green", "color2", "bright_green", Color.accent)
+    root.themeAmber = pick("yellow", "color3", "orange", Color.accent)
+    root.paletteLoaded = true
+  }
+
+  // A file watch on the theme directory does not survive a theme switch: the
+  // whole directory is replaced, so the watch dies with the old inode. The
+  // shell does keep its own five colours current, so a change in those is the
+  // signal to go and read the file again.
+  property Connections themeWatch: Connections {
+    target: Color
+    function onForegroundChanged() { root.reloadPalette() }
+    function onBackgroundChanged() { root.reloadPalette() }
+    function onAccentChanged() { root.reloadPalette() }
+  }
+
+  function reloadPalette() {
+    root.paletteReader.running = false
+    root.paletteReader.running = true
   }
 
   // -------------------------------------------------------------- settings
