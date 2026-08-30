@@ -57,11 +57,10 @@ Ui.BarWidget {
         .replace(/[<>]/g, "").slice(0, 128)
       parts.push("Drive: " + (label.length > 0 ? label : "paired"))
     }
-    if (!RipcordState.pairedAmbiguous) {
-      if (!RipcordState.watcherUp) parts.push("watcher down")
-    } else {
-      parts.push("two drives share this identity")
-    }
+    // Unconditional: a stopped watcher is the one fact that says nothing is
+    // being watched, and it must not be crowded out by any other warning.
+    // The ambiguity is not repeated here - statusText above already says it.
+    if (!RipcordState.watcherUp) parts.push("watcher down")
     return parts.join(" · ")
   }
 

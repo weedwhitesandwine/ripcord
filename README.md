@@ -149,8 +149,14 @@ unpluggable — against synthetic device trees, including the cases real hardwar
 cannot produce on demand.
 
 ```bash
-python3 test-classify.py
+python3 test-classify.py     # which devices count as unpluggable
+python3 test-trap-logic.py   # when the trap fires, and when it must not
 ```
+
+`test-trap-logic.py` models the arming and triggering rules, including the case
+that matters most: with a second drive attached reporting the same identity as
+your key, pulling the real one still fires. Counting matching drives is not the
+same as watching the drive you armed on.
 
 ## Licence
 

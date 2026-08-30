@@ -60,6 +60,34 @@ QtObject {
 
   readonly property bool pairedPresent: root.pairedMatches > 0
 
+  // Which attached drive the trap was armed against. Counting matches is not
+  // enough: with an impostor plugged in, pulling the real key drops the count
+  // from two to one and "something still matches" stays true, so nothing
+  // fires. Binding to the device the trap was armed against means the trap
+  // watches the drive it was actually set on.
+  //
+  // Not persisted, because arming is not persisted either - a device name is
+  // only meaningful for as long as this armed session lasts.
+  property string armedDevice: ""
+
+  function deviceForPairedId() {
+    for (var i = 0; i < root.drives.length; i++) {
+      if (root.drives[i].id === root.pairedId) return root.drives[i].device
+    }
+    return ""
+  }
+
+  // What the trap actually watches. Falls back to plain presence when nothing
+  // is armed, which is what the pairing UI wants.
+  readonly property bool trapSeesKey: {
+    if (!root.armed || root.armedDevice.length === 0) return root.pairedPresent
+    for (var i = 0; i < root.drives.length; i++) {
+      var drive = root.drives[i]
+      if (drive.id === root.pairedId && drive.device === root.armedDevice) return true
+    }
+    return false
+  }
+
   // More than one attached drive answering to the paired identity means the
   // trap can no longer tell them apart - pull the real key and the impostor
   // holds the match open, so nothing fires. Cheap flash drives are routinely
@@ -97,10 +125,12 @@ QtObject {
 
   readonly property string statusText: {
     if (!root.paired) return "No drive paired"
-    if (root.pairedAmbiguous) return "Two drives share this identity"
-    if (!root.armed) return "Disarmed"
+    // Armed comes first whatever else is true. A warning that replaces the
+    // word ARMED leaves the user believing the trap is off.
+    if (!root.armed) return root.pairedAmbiguous ? "Two drives match" : "Disarmed"
     if (root.awaitingReinsert) return "Tripped — reinsert to re-arm"
-    if (!root.pairedPresent) return "Armed, drive missing"
+    if (root.pairedAmbiguous) return "Armed — key ambiguous"
+    if (!root.trapSeesKey) return "Armed, drive missing"
     return root.rehearsal ? "Armed (rehearsal)" : "Armed"
   }
 
@@ -115,12 +145,14 @@ QtObject {
   function arm() {
     if (!root.canArm()) return
     root.awaitingReinsert = false
+    root.armedDevice = root.deviceForPairedId()
     root.armed = true
     root.lastEvent = "Armed at " + Qt.formatTime(new Date(), "HH:mm")
   }
 
   function disarm() {
     root.armed = false
+    root.armedDevice = ""
     root.awaitingReinsert = false
     root.lastEvent = "Disarmed at " + Qt.formatTime(new Date(), "HH:mm")
   }
@@ -145,10 +177,10 @@ QtObject {
 
   // ------------------------------------------------------------ the trap
 
-  onPairedPresentChanged: root.evaluate()
+  onTrapSeesKeyChanged: root.evaluate()
 
   function evaluate() {
-    if (root.pairedPresent) {
+    if (root.trapSeesKey) {
       // The drive is back, so a tripped trap can be set again.
       if (root.awaitingReinsert) {
         root.awaitingReinsert = false
@@ -159,6 +191,13 @@ QtObject {
     if (!root.armed) return
     if (root.awaitingReinsert) return
     root.trip()
+  }
+
+  onPairedAmbiguousChanged: {
+    if (!root.armed || !root.pairedAmbiguous) return
+    root.lastEvent = "Another drive now reports the paired identity"
+    root.notify("Ripcord",
+                "A second drive reports the same identity as your key. Ripcord is still watching the drive it was armed on.")
   }
 
   function trip() {
@@ -332,7 +371,14 @@ QtObject {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return
     // The watcher says when it could not describe the drives. That is not the
     // same as there being none, and acting on it would fire the trap.
-    if (parsed.unreportable === true) return
+    if (parsed.unreportable === true) {
+      if (root.armed) {
+        root.lastEvent = "Drives could not be read — protection may be stale"
+        root.notify("Ripcord",
+                    "The drive list could not be read, so Ripcord is working from stale information.")
+      }
+      return
+    }
     if (!Array.isArray(parsed.drives)) return
 
     var cleaned = []

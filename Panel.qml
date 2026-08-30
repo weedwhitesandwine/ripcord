@@ -422,8 +422,9 @@ Ui.Panel {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
-                visible: !trapSection.choosing && !RipcordState.armed
-                         && !RipcordState.canArm()
+                visible: !trapSection.choosing
+                         && (RipcordState.pairedAmbiguous
+                             || (!RipcordState.armed && !RipcordState.canArm()))
                 text: RipcordState.pairedAmbiguous
                   ? "Two attached drives report the same identity, so pulling the paired one would go unnoticed. Unplug the other before arming."
                   : "Plug the paired drive in before arming."
@@ -438,7 +439,11 @@ Ui.Panel {
                 textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
+                // Not shown while the identity is ambiguous: it would be
+                // promising a response the user has just been told may not
+                // happen.
                 visible: !trapSection.choosing && RipcordState.armed
+                         && !RipcordState.pairedAmbiguous
                 text: RipcordState.rehearsal
                   ? "Rehearsal is on: pulling the drive sends a notification and does nothing else."
                   : ("Pulling the drive will "
