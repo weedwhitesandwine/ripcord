@@ -91,10 +91,21 @@ with something else yields nothing rather than something.
 | Command | When |
 |---|---|
 | `python3 ripcord-watch.py` | Once, for the life of the shell — the drive watcher |
-| `loginctl lock-session`, falling back to `hyprlock` | When the trap fires and locking is enabled |
+| `python3 -c …` | At startup and on a theme change, to read the settings file and the theme palette to a fixed ceiling |
+| `omarchy-system-lock`, or `hyprlock`, or `loginctl lock-session` | When the trap fires and locking is enabled — the first of those that exists |
+| `omarchy-hyprland-session-locked` | About a second after a lock, to confirm the session really locked |
 | `systemctl suspend` | When the trap fires and sleeping is enabled (off by default) |
-| `notify-send` | On a rehearsal trigger, and if the watcher stops while armed |
+| `notify-send` | On a rehearsal trigger, if a lock fails or does not take, and if the watcher stops while armed |
 | `mkdir -p -m 700` | Once at startup, for the state directory |
+
+**Why the lock order is what it is.** On Omarchy Quattro, `loginctl lock-session`
+does nothing at all *and exits 0*, so it is neither a working lock nor a
+detectable failure — a plugin trusting it would report success and leave the
+session open. `omarchy-system-lock` drives the shell's own lock service and
+also locks 1Password, which is the right behaviour for the situation this
+plugin exists for, so it goes first. Because a zero exit proves nothing here,
+Ripcord asks the compositor a moment later whether the session actually locked
+and tells you if it did not.
 
 Every one of these runs as you, with your own session's permissions. The
 watcher is started with `setpriv --pdeathsig TERM` so it cannot outlive the
@@ -103,6 +114,17 @@ shell.
 **Network**
 
 None. Ripcord does not open sockets and makes no requests.
+
+## Choosing a drive
+
+Use a drive with nothing on it that you care about. Ripcord's whole purpose is
+that the drive gets yanked out without warning, and pulling a mounted
+filesystem mid-write can corrupt it. A cheap empty stick costs nothing to
+replace and nothing to lose; the drive is a key, not storage.
+
+If you must use one that carries data, unmount it before arming — Ripcord
+watches for the device disappearing, so an unmounted-but-present drive still
+arms and still triggers when it is physically removed.
 
 ## Limits worth knowing
 
