@@ -4,20 +4,24 @@
   <img src="preview.png" width="420" alt="Ripcord armed, showing the hazard bar and STAND DOWN"/>
 </p>
 
-Pair a USB drive to your machine and carry it on a lanyard. If the drive is
-pulled out, the session locks — and, if you ask it to, the machine goes to
-sleep.
+### Built for the field, not the desk: your USB drive is the key. It gets yanked and the machine locks.
 
-The idea is a failsafe for working in public: the drive is tethered to you, so
-if the laptop is snatched the drive comes out with you and the machine is
-behind a password prompt before it has left the table.
+## About this project
+
+The intent is a failsafe for anyone working somewhere their laptop might be
+taken off the table in front of them — a café, a border queue, a press pit, a
+protest. It works by making a "key" drive that is tethered to you like a
+ripcord. If the machine is carried away, the drive comes out with you, and the
+session locks the moment it goes. Optionally it sleeps as well, so the memory
+is cold before the machine is out of the room.
+
+The drive does not have to be plugged in all the time — only when you think you
+might be at risk. And it only fires on the *first* removal after being
+inserted: unlock after a trigger and it will not fire again until the drive has
+been put back and pulled out once more.
 
 It is a deterrent against a snatch-and-run. It is not a defence against someone
 who has your machine and time — see [What it cannot do](#what-it-cannot-do).
-
-The concept is borrowed from [RipCord](https://github.com/kclose3/RipCord), a
-macOS project by [KClose](https://github.com/kclose3). This is an independent
-implementation for Omarchy and shares no code with it.
 
 ## How it works
 
@@ -234,6 +238,14 @@ merely contains the letters "usb".
 that matters most: with a second drive attached reporting the same identity as
 your key, pulling the real one still fires. It models the logic rather than
 executing the QML, so the two are kept in step by hand.
+
+## Credits
+
+The concept comes from [RipCord](https://github.com/kclose3/RipCord) by
+[KClose](https://github.com/kclose3). All credit for the original idea and its
+macOS implementation goes to them.
+
+This is an independent implementation for Omarchy and shares no code with it.
 
 ## Licence
 

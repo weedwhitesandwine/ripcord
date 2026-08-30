@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "weedwhitesandwine",
   "license": "MIT",
-  "description": "Pair a USB drive to your machine and carry it on a lanyard. If the drive is pulled out, the session locks — and, if you ask it to, the machine sleeps. A rehearsal mode lets you test the trap without springing it.",
+  "description": "Snatch-and-run defence for risky places: your tethered USB drive gets yanked and the session locks.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Ripcord",
-    "description": "Arms a paired USB drive as a physical tether: pull it out and the session locks",
+    "description": "A tethered USB drive as a physical key \u2014 it gets yanked and the session locks",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right"
